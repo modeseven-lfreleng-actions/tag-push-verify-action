@@ -26,20 +26,31 @@ jobs:
       - name: "Checkout repository"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # Perform setup prior to running test(s)
-      - name: "Testing setup step"
-        shell: bash
-        run: |
-          # Testing setup step
-          echo "Testing setup step"
-          echo "Testing setup step/summary output" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: "Running local action: ${{ github.repository }}"
+      - name: "Running local action: ${{ github.repository }} [SemVer]"
+        id: 'semver'
         uses: ./
+        with:
+          versioning: 'semver'
+        # This action relies on a tag push and is non-trivial to test here
+        # Local testing here expected to fail; will test downstream
+        continue-on-error: true
+
+      - name: "Running local action: ${{ github.repository }} [CalVer]"
+        id: 'calver'
+        uses: ./
+        with:
+          versioning: 'calver'
+        # This action relies on a tag push and is non-trivial to test here
+        # Local testing here expected to fail; will test downstream
+        continue-on-error: true
 
       - name: "Validating local action: ${{ github.repository }}"
+        # yamllint disable-line rule:line-length
+        if: steps.semver.outcome == 'success' || steps.calver.outcome == 'success'
         shell: bash
         run: |
-          # Local action validation
-          echo "Validating local action: ${{ github.repository }}"
-          echo "Validation step summary output" >> "$GITHUB_STEP_SUMMARY"
+          # Validating local action
+          echo "Error: testing without a pushed tag is expected to fail ❌" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo "Error: testing without a pushed tag is expected to fail ❌"
+          exit 1
