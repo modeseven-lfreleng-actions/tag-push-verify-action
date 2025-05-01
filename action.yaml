@@ -2,38 +2,115 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 
-# actions-template
-name: "🛠️ Actions Template"
-description: "Description of action"
-# Any relevant notes/observations can go here
+# tag-push-verify-action
+name: "🏷️ Verify Pushed Tag"
+description: "Verifies action/workflow trigger was tag push of given type"
 
 inputs:
-  INPUT:
-    description: "Description of input"
+  versioning:
+    description: 'Tag/string versioning type to check/validate'
+    type: 'string'
     required: false
-    type: string
-    default: "input"
+    # Options: [semver|calver|none]
+    default: 'semver'
+  exit_on_fail:
+    description: 'When set true will exit on failed validation'
+    required: false
+    type: 'boolean'
+    default: true
 
 outputs:
-  OUTPUT:
-    description: "Description of output"
-    value: ${{ steps.code.outputs.output }}
+  valid:
+    description: 'Set true when pushed tag conforms to versioning type'
+    value: "${{ steps.results.outputs.valid }}"
+  tag:
+    description: 'Set to the pushed tag value: github.ref_name'
+    value: "${{ steps.refs.outputs.tag }}"
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: "Friendly Name"
-      id: code
+    - name: 'Report action/workflow environment/triggers'
+      id: refs
       shell: bash
       run: |
-        # Friendly Name
-        INPUT="${{ inputs.input }}"
-        if [ -z "$INPUT" ]; then
-          echo "Error: mandatory input INPUT was not set/configured ❌"
+        # Report action/workflow environment
+        echo 'GitHub Action/Workflow Event/Triggers 💬'
+        echo "GitHub ref: ${{ github.ref }}"
+        echo "GitHub ref type: ${{ github.ref_type }}"
+        # For actions/workflows triggered by a tag push, this is the tag value
+        echo "GitHub ref name: ${{ github.ref_name }} 🏷️"
+        echo "tag=${{ github.ref_name }}" >> "$GITHUB_ENV"
+        echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+        echo 'valid=false' >> "$GITHUB_OUTPUT"
+
+    - name: 'Error when NOT triggered by pushed tag'
+      # yamllint disable-line rule:line-length
+      if: github.ref_type != 'tag' || ! startsWith(github.ref, 'refs/tags/')
+      shell: bash
+      run: |
+        # Error when NOT triggered by pushed tag
+        if [ "f${{ inputs.exit_on_fail }}" = "ftrue" ]; then
+          echo 'Workflow/action trigger was NOT tag push event ❌'
+          exit 1
+        else
+          echo 'Workflow/action trigger was NOT tag push event ⚠️'
+        fi
+
+    - name: "Validate action inputs"
+      # yamllint disable-line rule:line-length
+      shell: bash
+      run: |
+        # Validate action inputs
+        if [ "${{ inputs.versioning }}" = 'semver' ] || \
+          [ "${{ inputs.versioning }}" = 'calver' ] || \
+          [ "${{ inputs.versioning }}" = 'none' ]; then
+          echo 'Action inputs validated 💬'
+        else
+          echo "Error: invalid versioning input: ${{ inputs.versioning }} ❌"
           exit 1
         fi
 
-        echo "output=$INPUT" >> "$GITHUB_ENV"
-        echo "output=$INPUT" >> "$GITHUB_OUTPUT"
-        echo "Action received a valid input: $INPUT ✅"
-        echo "Action received a valid input: $INPUT ✅" >> "$GITHUB_STEP_SUMMARY"
+    - name: 'Validate tag/string [semver]'
+      if: inputs.versioning == 'semver'
+      id: semver
+      # yamllint disable-line rule:line-length
+      uses: lfreleng-actions/tag-validate-semantic-action@0371424cc6cf23c5f84ab11faf675c969014706d # v0.2.0
+      with:
+        string: "${{ github.ref_name }}"
+        exit_on_fail: "${{ inputs.exit_on_fail }}"
+
+    - name: 'Validate tag/string [calver]'
+      if: inputs.versioning == 'calver'
+      id: calver
+      # yamllint disable-line rule:line-length
+      uses: lfreleng-actions/tag-validate-calver-action@c0684c67ba3a9f6f0c607f32eda6bd8d1564b2be # v0.1.0
+      with:
+        string: "${{ github.ref_name }}"
+        exit_on_fail: "${{ inputs.exit_on_fail }}"
+
+    - name: 'Set outputs and return results'
+      if: steps.semver.outcome == 'success' || steps.calver.outcome == 'success'
+      id: results
+      shell: bash
+      run: |
+        # Validation passed
+        if [ "${{ steps.semver.outcome }}" = 'success' ]; then
+          echo 'Pushed tag conforms to Semantic Versioning ✅' \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo 'valid=true' >> "$GITHUB_OUTPUT"
+        elif [ "${{ steps.calver.outcome }}" = 'success' ]; then
+          echo 'Pushed tag conforms to Calendar Versioning ✅' \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo 'valid=true' >> "$GITHUB_OUTPUT"
+        elif [ "${{ inputs.versioning }}" = 'none' ]; then
+          echo 'Tag validation not enabled for this action/workflow ⚠️' \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo 'valid=untested' >> "$GITHUB_OUTPUT"
+        else
+          echo "Tag/string failed ${{ inputs.versioning }} validation ❌"
+          echo 'valid=false' >> "$GITHUB_OUTPUT"
+          if [ "f$exit_on_fail" = "ftrue" ]; then
+            exit 1
+          fi
+        fi
