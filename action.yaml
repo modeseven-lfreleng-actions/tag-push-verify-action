@@ -75,7 +75,7 @@ runs:
       if: inputs.versioning == 'semver'
       id: semver
       # yamllint disable-line rule:line-length
-      uses: lfreleng-actions/tag-validate-semantic-action@0371424cc6cf23c5f84ab11faf675c969014706d # v0.2.0
+      uses: lfreleng-actions/tag-validate-semantic-action@96445f92479f91efd979dffb2e2610a32d7eccd0 # v0.2.1
       with:
         string: "${{ github.ref_name }}"
         exit_on_fail: "${{ inputs.exit_on_fail }}"
